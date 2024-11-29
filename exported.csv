@@ -1,0 +1,5 @@
+Device Name,Device Type,Port Number,Connected To,PoE,VLAN
+RT,Router,1,WAP,No,No
+RT,Router,2,Phone,Yes,No
+RT,Router,3,WAN,No,Yes
+RT,Router,4,Storage,No,Yes

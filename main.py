@@ -88,6 +88,7 @@ class NetworkInventoryApp:
     def add_device(self):
             # Call the add_device method from InventoryManager
             self.inventory_manager.add_device()
+            self.refresh_cable_management()
 
     def list_devices(self):
         # Display device list in a message box
@@ -113,16 +114,40 @@ class NetworkInventoryApp:
         # Add right-click binding for editing port details
         self.port_mapping_table.bind("<Button-3>", self.edit_port_details)
 
-        # Display simplified cable management view
+        # Display the cable management view
         cable_management_label = ttk.Label(self.port_mapping_frame, text="Cable Management View")
         cable_management_label.pack(pady=5)
 
-        self.cable_management_list = tk.Listbox(self.port_mapping_frame, height=10)
-        self.cable_management_list.pack(fill="both", expand=True)
+        self.cable_management_table = ttk.Treeview(
+            self.port_mapping_frame, columns=("Device", "Port", "Connected To"), show="headings"
+        )
+        self.cable_management_table.heading("Device", text="Device")
+        self.cable_management_table.heading("Port", text="Port")
+        self.cable_management_table.heading("Connected To", text="Connected To")
+        self.cable_management_table.pack(fill="both", expand=True)
 
         # Refresh cable management list
         self.refresh_cable_management()
 
+    def refresh_port_mapping(self):
+        # Clear existing rows
+        self.port_mapping_table.delete(*self.port_mapping_table.get_children())
+
+        # Populate Treeview with devices and their ports
+        for device_index, device in enumerate(self.inventory_manager.devices):
+            device_id = self.port_mapping_table.insert("", "end", text=f"{device['name']} ({device['type']})")
+
+            for port_index, port in enumerate(device["ports"]):
+                self.port_mapping_table.insert(
+                    device_id, "end",
+                    values=(
+                        f"Port {port_index + 1}",
+                        port["connected_to"] or "",
+                        "Yes" if port["options"].get("PoE") else "No",
+                        "Yes" if port["options"].get("VLAN") else "No"
+                    )
+                )
+    
     def new_inventory(self):
         # Placeholder function for creating a new inventory
         messagebox.showinfo("New Inventory", "New inventory setup not implemented yet.")
@@ -175,11 +200,27 @@ class NetworkInventoryApp:
                 messagebox.showinfo("Device List", "No devices match your search. Add one!")
                 self.add_device()
             else:
-                device_info = "\n".join([f"{name} ({device_type})" for name, device_type in filtered_devices])
-                messagebox.showinfo("Filtered Device List", device_info)
+                # device_info = "\n".join([f"{name} ({device_type})" for name, device_type in filtered_devices])
+                # messagebox.showinfo("Filtered Device List", device_info)
+                # Refresh the Treeview with filtered devices
+                self.port_mapping_table.delete(*self.port_mapping_table.get_children())
+                for device in filtered_devices:
+                    device_id = self.port_mapping_table.insert("", "end", text=f"{device['name']} ({device['type']})")
+                    for port_index, port in enumerate(device["ports"]):
+                        self.port_mapping_table.insert(
+                            device_id, "end",
+                            values=(
+                                f"#{port_index + 1}",
+                                port["connected_to"] or "",
+                                "Yes" if port["options"].get("PoE") else "No",
+                                "Yes" if port["options"].get("VLAN") else "No"
+                            )
+                        )
         else:
             # Optionally reset the device list or show all devices
             print("Enter at least 4 characters to search.")
+            self.refresh_port_mapping()
+
             
             
     def edit_port_details(self, event):
@@ -236,19 +277,39 @@ class NetworkInventoryApp:
             sfp = self.sfp_var.get()  # Get the value of SFP checkbox
 
             # Update the table with the new port details, including the checkbox values
-            self.port_mapping_table.item(selected_item, values=(port_number, new_device, new_port, poe, vlan, sfp))
+            self.port_mapping_table.item(selected_item, values=(port_number, new_device, new_port, "Yes" if poe else "No", "Yes" if vlan else "No", sfp))
             edit_window.destroy()
+            
+            # update treeview
+            self.refresh_cable_management()
 
         save_button = ttk.Button(edit_window, text="Save", command=save_details)
         save_button.pack(pady=10)
 
+    def create_cable_management_view(self):
+        # Create a Treeview for cable management
+        self.cable_management_table = ttk.Treeview(
+            self.port_mapping_frame, columns=("Device", "Port", "Connected To"), show="headings"
+        )
+        self.cable_management_table.heading("Device", text="Device")
+        self.cable_management_table.heading("Port", text="Port")
+        self.cable_management_table.heading("Connected To", text="Connected To")
+        self.cable_management_table.pack(fill="both", expand=True)
+
     def refresh_cable_management(self):
-        self.cable_management_list.delete(0, tk.END)
+        # Clear the existing rows in the Treeview
+        self.cable_management_table.delete(*self.cable_management_table.get_children())
+        
+        # Populate the Treeview with device and port connections
         for device in self.inventory_manager.devices:
-            self.cable_management_list.insert(tk.END, f"{device['name']} ({device['type']})")
-            for port in device["ports"]:
-                self.cable_management_list.insert(
-                    tk.END, f"  Port {port['number']}: Connected to {port['connected_device']} on Port {port['connected_port']}"
+            for port_index, port in enumerate(device["ports"]):
+                self.cable_management_table.insert(
+                    "", "end",
+                    values=(
+                        device["name"],
+                        f"Port {port_index + 1}",
+                        port["connected_to"] or "Unconnected"
+                    )
                 )
 
 

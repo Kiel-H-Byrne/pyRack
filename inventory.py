@@ -58,6 +58,22 @@ class InventoryManager:
         port_window.title(f"Ports for {device_name}")
         port_window.geometry("400x400")
 
+        # Add a canvas for scrollable content
+        canvas = tk.Canvas(port_window)
+        scrollbar = ttk.Scrollbar(port_window, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
         # Port list frame with headers
         port_frame = ttk.Frame(port_window)
         port_frame.pack(fill="both", expand=True)
@@ -68,42 +84,52 @@ class InventoryManager:
             header_label.grid(row=0, column=col, padx=5, pady=5)
 
         # Display each port and its settings
+        connection_entries = []  # Store references to the connection entries for saving
+        poe_vars = []            # Store PoE BooleanVars
+        vlan_vars = []           # Store VLAN BooleanVars
+
         for i, port in enumerate(device["ports"]):
             port_num_label = ttk.Label(port_frame, text=f"Port {i + 1}")
             port_num_label.grid(row=i + 1, column=0, padx=5, pady=5)
 
             # Connection entry
-            connection_entry = ttk.Entry(port_frame, width=15)
-            connection_entry.insert(0, port["connected_to"] or "")
+            connection_var = tk.StringVar(value=port["connected_to"] or "")
+            connection_entry = ttk.Entry(port_frame, textvariable=connection_var, width=15)
             connection_entry.grid(row=i + 1, column=1, padx=5, pady=5)
+            connection_entries.append((i, connection_var))  # Track port index and variable
 
-             # PoE checkbox
-            poe_var = tk.BooleanVar(value=port["options"].get("PoE", False))  # Initialize with current value
+            # PoE checkbox
+            poe_var = tk.BooleanVar(value=port["options"].get("PoE", False))
             poe_check = ttk.Checkbutton(port_frame, text="PoE", variable=poe_var)
             poe_check.grid(row=i + 1, column=2, padx=5, pady=5)
+            poe_vars.append((i, poe_var))
 
             # VLAN checkbox
-            vlan_var = tk.BooleanVar(value=port["options"].get("VLAN", False))  # Initialize with current value
+            vlan_var = tk.BooleanVar(value=port["options"].get("VLAN", False))
             vlan_check = ttk.Checkbutton(port_frame, text="VLAN", variable=vlan_var)
             vlan_check.grid(row=i + 1, column=3, padx=5, pady=5)
+            vlan_vars.append((i, vlan_var))
 
-            # Save changes to the port configuration
-            def save_port_changes():
-                for j, port in enumerate(device["ports"]):
-                    # Update the port details with the user input
-                    port["connected_to"] = port_frame.grid_slaves(row=j + 1, column=1)[0].get()  # Get connection entry
+        # Save changes to the port configuration
+        def save_port_changes():
+            for i, connection_var in connection_entries:
+                device["ports"][i]["connected_to"] = connection_var.get()  # Save connection
+            for i, poe_var in poe_vars:
+                device["ports"][i]["options"]["PoE"] = poe_var.get()  # Save PoE
+            for i, vlan_var in vlan_vars:
+                device["ports"][i]["options"]["VLAN"] = vlan_var.get()  # Save VLAN
 
-                    # Update the port options based on checkbox states
-                    port["options"]["PoE"] = poe_var.get()  # Get PoE checkbox state
-                    port["options"]["VLAN"] = vlan_var.get()  # Get VLAN checkbox state
+            # Refresh the port mapping and cable management views
+            self.parent.refresh_port_mapping()
+            self.parent.refresh_cable_management()
 
-                messagebox.showinfo("Saved", f"Port configuration saved for {device_name}")
-                port_window.destroy()
+            messagebox.showinfo("Saved", f"Port configuration saved for {device_name}")
+            port_window.destroy()
 
         # Save button
-        save_button = ttk.Button(port_window, text="Save", command=save_port_changes)
-        save_button.pack(pady=10)
-
+        save_button = ttk.Button(scrollable_frame, text="Save", command=save_port_changes)
+        save_button.grid(row=len(device["ports"]) + 1, column=0, columnspan=4, pady=10)
+    
     def save_inventory(self):
             # Open file dialog to save the inventory as JSON
             file_path = filedialog.asksaveasfilename(defaultextension=".json", 
